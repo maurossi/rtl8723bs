@@ -541,12 +541,28 @@ check_bss:
 		struct ieee80211_channel *notify_channel;
 		u32 freq;
 		u16 channel = cur_network->network.Configuration.DSConfig;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,12,0))
+		struct cfg80211_roam_info roam_info = {};
+#endif
 
 		freq = rtw_ieee80211_channel_to_frequency(channel, IEEE80211_BAND_2GHZ);
 
 		notify_channel = ieee80211_get_channel(wiphy, freq);
 
 		DBG_871X(FUNC_ADPT_FMT" call cfg80211_roamed\n", FUNC_ADPT_ARG(padapter));
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,12,0))
+		roam_info.channel = notify_channel;
+		roam_info.bssid = cur_network->network.MacAddress;
+		roam_info.req_ie =
+			pmlmepriv->assoc_req+sizeof(struct ieee80211_hdr_3addr)+2;
+		roam_info.req_ie_len =
+			pmlmepriv->assoc_req_len-sizeof(struct ieee80211_hdr_3addr)-2;
+		roam_info.resp_ie =
+			pmlmepriv->assoc_rsp+sizeof(struct ieee80211_hdr_3addr)+6;
+		roam_info.resp_ie_len =
+			pmlmepriv->assoc_rsp_len-sizeof(struct ieee80211_hdr_3addr)-6;
+		cfg80211_roamed(padapter->pnetdev, &roam_info, GFP_ATOMIC);
+#else
 		cfg80211_roamed(padapter->pnetdev
 			, notify_channel
 			, cur_network->network.MacAddress
@@ -555,6 +571,7 @@ check_bss:
 			, pmlmepriv->assoc_rsp+sizeof(struct ieee80211_hdr_3addr)+6
 			, pmlmepriv->assoc_rsp_len-sizeof(struct ieee80211_hdr_3addr)-6
 			, GFP_ATOMIC);
+#endif
 	}
 	else
 	{
@@ -3432,7 +3449,11 @@ static void rtw_cfg80211_preinit_wiphy(struct adapter *padapter, struct wiphy *w
 	wiphy->flags |= WIPHY_FLAG_OFFCHAN_TX | WIPHY_FLAG_HAVE_AP_SME;
 
 #if defined(CONFIG_PM)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,12,0))
 	wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
+#else // kernel >= 4.12
+	wiphy->max_sched_scan_reqs = 1;
+#endif
 #ifdef CONFIG_PNO_SUPPORT
 	wiphy->max_sched_scan_ssids = MAX_PNO_LIST_COUNT;
 #endif
